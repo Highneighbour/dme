@@ -283,6 +283,67 @@ pub mod damm_v2_fee_module {
     }
 }
 
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_pda_derivation() {
+        let program_id = id();
+        let vault_id: u64 = 1;
+        let vault_id_bytes = vault_id.to_le_bytes();
+
+        // Test position owner PDA
+        let (position_owner, bump) = Pubkey::find_program_address(
+            &[b"investor_fee_pos_owner", &vault_id_bytes],
+            &program_id,
+        );
+
+        assert!(bump > 0 && bump < 255);
+
+        // Test honorary position PDA
+        let (honorary_position, _) = Pubkey::find_program_address(
+            &[b"honorary_position", &vault_id_bytes],
+            &program_id,
+        );
+
+        // Ensure all PDAs are unique
+        assert_ne!(position_owner, honorary_position);
+    }
+
+    #[test]
+    fn test_distribution_math() {
+        // Test the distribution math (without overflow)
+        let y0: u64 = 1_000_000_000; // 1B tokens
+        let locked_total: u64 = 500_000_000; // 500M locked (50%)
+        
+        // Calculate f_locked
+        let f_locked = (locked_total as u128)
+            .checked_mul(10000)
+            .unwrap()
+            .checked_div(y0 as u128)
+            .unwrap() as u64;
+        
+        assert_eq!(f_locked, 5000); // 50% = 5000 bps
+
+        // Test investor share calculation
+        let investor_fee_share_bps = 5000u64;
+        let eligible_share = std::cmp::min(investor_fee_share_bps, f_locked);
+        
+        assert_eq!(eligible_share, 5000);
+
+        // Test investor fee calculation
+        let claimed_quote: u64 = 1_000_000;
+        let investor_fee_quote = (claimed_quote as u128)
+            .checked_mul(eligible_share as u128)
+            .unwrap()
+            .checked_div(10000)
+            .unwrap() as u64;
+        
+        assert_eq!(investor_fee_quote, 500_000); // 50% of 1M = 500K
+    }
+}
+
 // Note on DAMM v2 CPI Integration:
 // In a production implementation, add a CPI call here to claim fees from DAMM v2:
 //
